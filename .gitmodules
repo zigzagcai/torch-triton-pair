@@ -1,0 +1,9 @@
+[submodule "liger-kernel-src"]
+	path = liger-kernel-src
+	url = https://github.com/linkedin/Liger-Kernel.git
+[submodule "dlblas-src"]
+	path = dlblas-src
+	url = https://github.com/DeepLink-org/DLBlas.git
+[submodule "flaggems-src"]
+	path = flaggems-src
+	url = https://github.com/FlagOpen/FlagGems.git
