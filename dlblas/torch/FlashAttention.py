@@ -1,32 +1,65 @@
-# adapted from https://github.com/DeepLink-org/DLBlas/blob/main/dlblas/kernels/flash_attention_v2.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class Model(nn.Module):
+    """
+    Simple model that performs Flash Attention (scaled dot-product attention).
+    Uses PyTorch's fused SDPA kernel when available (FlashAttention / memory-efficient).
+    """
     def __init__(self):
-        super().__init__()
+        super(Model, self).__init__()
 
-    def forward(self, query, key, value):
-        return F.scaled_dot_product_attention(
-            query.permute(0, 2, 1, 3).cpu(),
-            key.permute(0, 2, 1, 3).cpu(),
-            value.permute(0, 2, 1, 3).cpu(),
-        ).permute(0, 2, 1, 3)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Applies scaled dot-product attention to the input tensor.
 
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim).
+                              This tensor is used as Q, K, V (self-attention).
 
-seq_len = 25600
-heads = 32
-dim = 64
-dtype = torch.float16
-device = torch.device('cuda')
+        Returns:
+            torch.Tensor: Attention output of shape (batch_size, seq_len, dim).
+        """
+        # Self-attention: Q = K = V = x
+        q = x
+        k = x
+        v = x
+
+        # Prefer PyTorch fused kernels (FlashAttention) on supported GPUs/dtypes.
+        # For maximum compatibility, keep dropout_p=0.0 and is_causal=False.
+        try:
+            with torch.backends.cuda.sdp_kernel(
+                enable_flash=True,
+                enable_math=True,
+                enable_mem_efficient=True,
+            ):
+                out = F.scaled_dot_product_attention(
+                    q, k, v,
+                    attn_mask=None,
+                    dropout_p=0.0,
+                    is_causal=False,
+                )
+        except Exception:
+            # Fallback (math attention) if SDPA kernel selection/context isn't available.
+            out = F.scaled_dot_product_attention(
+                q, k, v,
+                attn_mask=None,
+                dropout_p=0.0,
+                is_causal=False,
+            )
+
+        return out
+
+batch_size = 16
+seq_len = 128
+dim = 512
 
 def get_inputs():
-    query = torch.rand([1, seq_len, heads, dim], dtype=dtype, device=device)
-    key = torch.rand([1, seq_len, heads, dim], dtype=dtype, device=device)
-    value = torch.rand([1, seq_len, heads, dim], dtype=dtype, device=device)
-    return [query, key, value]
+    # SDPA/FlashAttention is most effective on CUDA with fp16/bf16.
+    # Keep this generic; caller can move to CUDA and cast as needed.
+    x = torch.randn(batch_size, seq_len, dim)
+    return [x]
 
 def get_init_inputs():
     return []  # No special initialization inputs needed
